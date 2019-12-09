@@ -149,6 +149,7 @@
  * | nRF5         | N
  * | ESP8266      | E
  * | AVR          | A
+ * | STM32        | M
  * | STM32F1      | F
  * | TEENSY       | T
  * | Linux        | L
@@ -164,6 +165,8 @@
 #define MY_CAP_ARCH "F"
 #elif defined(ARDUINO_ARCH_AVR)
 #define MY_CAP_ARCH "A"
+#elif defined(ARDUINO_ARCH_STM32)
+#define MY_CAP_ARCH "M"
 #elif defined(ARDUINO_ARCH_STM32F1)
 #define MY_CAP_ARCH "F"
 #elif defined(__arm__) && defined(TEENSYDUINO)
