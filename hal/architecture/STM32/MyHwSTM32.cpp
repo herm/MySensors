@@ -18,6 +18,8 @@
  */
 
 #include "MyHwSTM32.h"
+#include <EEPROM.h>
+#include <core/MySensorsCore.h> // required for MY_SLEEP_NOT_POSSIBLE
 
 /*
 * Pinout STM32F103C8 dev board:
@@ -50,16 +52,8 @@ bool hwInit(void)
 	while (!MY_SERIALDEVICE) {}
 #endif
 #endif
-	if (EEPROM.init() == EEPROM_OK) {
-		uint16 cnt;
-		EEPROM.count(&cnt);
-		if(cnt>=EEPROM.maxcount()) {
-			// tmp, WIP: format eeprom if full
-			EEPROM.format();
-		}
-		return true;
-	}
-	return false;
+	//NOTE: EEPROM emulation does not require initialization.
+	return true; //HW init never fails for this platform.
 }
 
 void hwReadConfigBlock(void *buf, void *addr, size_t length)

@@ -21,8 +21,8 @@
 #define MyHwSTM32_h
 
 #include <itoa.h>
-#include <EEPROM.h>
 #include <SPI.h>
+#include <IWatchdog.h>
 
 #ifdef __cplusplus
 #include <Arduino.h>
@@ -52,10 +52,6 @@
 #endif
 
 // mapping
-#define snprintf_P snprintf
-#define vsnprintf_P vsnprintf
-#define strncpy_P strncpy
-#define printf_P printf
 #define yield()				  // not defined
 
 #ifndef digitalPinToInterrupt
@@ -65,8 +61,8 @@
 #define hwDigitalWrite(__pin, __value) digitalWrite(__pin, __value)
 #define hwDigitalRead(__pin) digitalRead(__pin)
 #define hwPinMode(__pin, __value) pinMode(__pin, __value)
-#define hwWatchdogReset() iwdg_feed()
-#define hwReboot() nvic_sys_reset()
+#define hwWatchdogReset() IWatchdog.reload()
+#define hwReboot() NVIC_SystemReset()
 #define hwMillis() millis()
 #define hwGetSleepRemaining() (0ul)
 
