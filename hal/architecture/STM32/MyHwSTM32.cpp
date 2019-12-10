@@ -118,10 +118,8 @@ int8_t hwSleep(const uint8_t interrupt1, const uint8_t mode1, const uint8_t inte
 
 void hwRandomNumberInit(void)
 {
+    //TODO: Some STMs have an integrated RNG. Use this if available.
 	// use internal temperature sensor as noise source
-	adc_reg_map *regs = ADC1->regs;
-	regs->CR2 |= ADC_CR2_TSVREFE;
-	regs->SMPR1 |= ADC_SMPR1_SMP16;
 
 	uint32_t seed = 0;
 	uint16_t currentValue = 0;
@@ -130,7 +128,7 @@ void hwRandomNumberInit(void)
 	for (uint8_t i = 0; i < 32; i++) {
 		const uint32_t timeout = hwMillis() + 20;
 		while (timeout >= hwMillis()) {
-			newValue = adc_read(ADC1, 16);
+			newValue = analogRead(ATEMP);
 			if (newValue != currentValue) {
 				currentValue = newValue;
 				break;
@@ -139,25 +137,57 @@ void hwRandomNumberInit(void)
 		seed ^= ( (newValue + hwMillis()) & 7) << i;
 	}
 	randomSeed(seed);
-	regs->CR2 &= ~ADC_CR2_TSVREFE; // disable VREFINT and temp sensor
 }
 
 bool hwUniqueID(unique_id_t *uniqueID)
 {
-	(void)memcpy((uint8_t *)uniqueID, (uint32_t *)0x1FFFF7E0, 16); // FlashID + ChipID
+    //TODO: This function might only be valid for STM32F1xx.
+	(void)memcpy((uint8_t *)uniqueID, (uint32_t *)FLASH_SIZE_DATA_REGISTER, 16); // FlashID + ChipID
 	return true;
 }
 
+
+#if defined(STM32F1xx)
+#define CALX_TEMP 25
+#define V25       1430
+#define AVG_SLOPE 4300
+#define VREFINT   1200
+#elif defined(STM32F2xx)
+#define CALX_TEMP 25
+#define V25       760
+#define AVG_SLOPE 2500
+#define VREFINT   1210
+#endif
+
+#ifndef VREFINT
+#warning "Vref value for this MCU is unknown. Look it up in the datasheet and add it to this file."
+#define VREFINT 1200
+#endif
+
+#if !defined(AVG_SLOPE) && !defined(__LL_ADC_CALC_TEMPERATURE)
+#warning "No temperature sensor parameters are available for this MCU. Look them up in the datasheet and add them to this file."
+#define CALX_TEMP 25
+#define V25       1430
+#define AVG_SLOPE 4300
+#endif
+
+
+#if ADC_RESOLUTION == 10
+#define LL_ADC_RESOLUTION LL_ADC_RESOLUTION_10B
+#define ADC_RANGE 1024
+#else
+#define LL_ADC_RESOLUTION LL_ADC_RESOLUTION_12B
+#define ADC_RANGE 4096
+#endif
+
+
 uint16_t hwCPUVoltage(void)
 {
-	adc_reg_map *regs = ADC1->regs;
-	regs->CR2 |= ADC_CR2_TSVREFE; // enable VREFINT and temp sensor
-	regs->SMPR1 =  ADC_SMPR1_SMP17; // sample rate for VREFINT ADC channel
-	adc_calibrate(ADC1);
-
-	const uint16_t vdd = adc_read(ADC1, 17);
-	regs->CR2 &= ~ADC_CR2_TSVREFE; // disable VREFINT and temp sensor
-	return (uint16_t)(1200u * 4096u / vdd);
+#ifdef __LL_ADC_CALC_VREFANALOG_VOLTAGE
+  return (__LL_ADC_CALC_VREFANALOG_VOLTAGE(analogRead(AVREF), LL_ADC_RESOLUTION));
+#else
+  return (VREFINT * ADC_RANGE / analogRead(AVREF)); // ADC sample to mV
+#endif
 }
 
 uint16_t hwCPUFrequency(void)
@@ -167,18 +197,18 @@ uint16_t hwCPUFrequency(void)
 
 int8_t hwCPUTemperature(void)
 {
-	adc_reg_map *regs = ADC1->regs;
-	regs->CR2 |= ADC_CR2_TSVREFE; // enable VREFINT and Temperature sensor
-	regs->SMPR1 |= ADC_SMPR1_SMP16 | ADC_SMPR1_SMP17;
-	adc_calibrate(ADC1);
-
-	//const uint16_t adc_temp = adc_read(ADC1, 16);
-	//const uint16_t vref = 1200 * 4096 / adc_read(ADC1, 17);
-	// calibrated at 25°C, ADC output = 1430mV, avg slope = 4.3mV / °C, increasing temp ~ lower voltage
-	const int8_t temp = static_cast<int8_t>((1430.0 - (adc_read(ADC1, 16) * 1200 / adc_read(ADC1,
-	                                        17))) / 4.3 + 25.0);
-	regs->CR2 &= ~ADC_CR2_TSVREFE; // disable VREFINT and temp sensor
-	return (temp - MY_STM32_TEMPERATURE_OFFSET) / MY_STM32_TEMPERATURE_GAIN;
+uint8_t temp;
+#ifdef __LL_ADC_CALC_TEMPERATURE
+    // Device has calibration data
+    temp = (__LL_ADC_CALC_TEMPERATURE(VRef, analogRead(ATEMP), LL_ADC_RESOLUTION));
+#elif defined(__LL_ADC_CALC_TEMPERATURE_TYP_PARAMS)
+    // Device has no calibration data
+    temp =  (__LL_ADC_CALC_TEMPERATURE_TYP_PARAMS(AVG_SLOPE, V25, CALX_TEMP, VRef, analogRead(ATEMP), LL_ADC_RESOLUTION));
+#else
+    // Device has not temperature sensor
+    return 0;
+#endif
+    return (temp - MY_STM32_TEMPERATURE_OFFSET) / MY_STM32_TEMPERATURE_GAIN;
 }
 
 uint16_t hwFreeMem(void)
